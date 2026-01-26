@@ -2,7 +2,7 @@
 
 julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "90780a6edfc247438ff197f3c732cc7628c0d0c3"
+project_hash = "669183b3b39f490264942caf0bdc60e6b23d1f7d"
 
 [[deps.AliasTables]]
 deps = ["PtrArrays", "Random"]
@@ -111,7 +111,7 @@ git-tree-sha1 = "439e35b0b36e2e5881738abc8857bd92ad6ff9a8"
 uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
 version = "0.6.3"
 
-[[deps."CorrIrrepProjection.jl"]]
+[[deps.CorrIrrepProjection]]
 deps = ["BenchmarkTools", "Dates", "DelimitedFiles", "FilePathsBase", "HDF5", "LaTeXStrings", "LinearAlgebra", "MKL", "MPI", "MPIPreferences", "Plots", "PrecompileTools", "Preferences", "TOML", "TensorOperations", "Test"]
 path = "."
 uuid = "9d0a36aa-c13c-472b-903a-b20a2f40063e"
@@ -242,9 +242,9 @@ version = "3.4.1+0"
 
 [[deps.GR]]
 deps = ["Artifacts", "Base64", "DelimitedFiles", "Downloads", "GR_jll", "HTTP", "JSON", "Libdl", "LinearAlgebra", "Preferences", "Printf", "Qt6Wayland_jll", "Random", "Serialization", "Sockets", "TOML", "Tar", "Test", "p7zip_jll"]
-git-tree-sha1 = "6949039c4db076a5967228bf9d7b6f32f2324328"
+git-tree-sha1 = "f2fd0ae89599c11473fbd846ea1b9ed8c24613fb"
 uuid = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"
-version = "0.73.20"
+version = "0.73.21"
 
     [deps.GR.extensions]
     IJuliaExt = "IJulia"
@@ -254,9 +254,9 @@ version = "0.73.20"
 
 [[deps.GR_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Cairo_jll", "FFMPEG_jll", "Fontconfig_jll", "FreeType2_jll", "GLFW_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pixman_jll", "Qt6Base_jll", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "04a6eb1e57dc3a6992b5af5aa753a2f8d3a1028e"
+git-tree-sha1 = "55965bc822094d9e5d314d2845fb77f1b74fc8f7"
 uuid = "d2c73de3-f751-5644-a686-071e5b155ba9"
-version = "0.73.20+0"
+version = "0.73.21+0"
 
 [[deps.GettextRuntime_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Libiconv_jll"]
@@ -916,9 +916,9 @@ version = "2.3.2"
 
 [[deps.StridedViews]]
 deps = ["LinearAlgebra", "PackageExtensionCompat"]
-git-tree-sha1 = "7feeb862b4d3ccdbc5d5a3dd9e321cfa92238dbb"
+git-tree-sha1 = "e34a59ea9c7abc8f10bfd77578de9d64bded2859"
 uuid = "4db3bf67-4bd7-4b4e-b153-31dc3fb37143"
-version = "0.4.2"
+version = "0.4.3"
 
     [deps.StridedViews.extensions]
     StridedViewsCUDAExt = "CUDA"
@@ -1223,9 +1223,9 @@ version = "0.61.1+0"
 
 [[deps.libaec_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "1aa23f01927b2dac46db77a56b31088feee0a491"
+git-tree-sha1 = "13b760f97c6e753b47df30cb438d4dc3b50df282"
 uuid = "477f73a3-ac25-53e9-8cc3-50b2fa2566f0"
-version = "1.1.4+0"
+version = "1.1.5+0"
 
 [[deps.libaom_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
