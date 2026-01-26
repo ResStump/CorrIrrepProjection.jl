@@ -6,11 +6,12 @@ import MPI
 import TOML
 import HDF5
 import DelimitedFiles as DF
-import FilePathsBase: /, Path
 import Dates
 
 include("functions/IO.jl")
+include("functions/types.jl")
 include("functions/utils.jl")
+include("functions/transformations.jl")
 include("functions/mpi_utils.jl")
 include("functions/projection.jl")
 

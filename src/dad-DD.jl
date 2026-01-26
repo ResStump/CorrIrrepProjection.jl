@@ -43,54 +43,116 @@ CIP.read_parameters()
 # Operators
 ###########
 
-include("operators/DD_operators.jl")
-include("operators/dad_operators.jl")
+include("operators/all_operators.jl")
 
-# Operator array
-O_i_arr = [[DDstarₛᵢ_A₁⁺0_T₁⁺_I0_nonlocal(i),
-            DDstarₛᵢ_A₁⁺1_T₁⁺_I0_nonlocal(i),
-            DDstarₛᵢ_E⁺1_T₁⁺_I0_nonlocal(i),
-            DDstarₛᵢ_A₁⁺2_T₁⁺_I0_nonlocal(i),
-            DDstarₛᵢ_J1⁺2_T₁⁺_I0_nonlocal(i),
-            DDstarₛᵢ_J3⁺2_T₁⁺_I0_nonlocal(i),
-            DstarDstarₛᵢ_A₁⁺0_S1_T₁⁺_I0_nonlocal(i),
-            DstarDstarₛᵢ_A₁⁺1_S1_T₁⁺_I0_nonlocal(i),
-            DstarDstarₛᵢ_E⁺1_S1_T₁⁺_I0_nonlocal(i),
-            DDstarₛᵢ_A₁⁺_T₁⁺_I0_local(i),
-            dadᵢ_A₁⁺_T₁⁺_I0_local(i),
-            DstarDstarₛᵢ_A₁⁺_S1_T₁⁺_I0_local(i)]
-            for i in 1:3]
+operator_labels = CIP.parms_toml["Operators"]
 
-N_op = length(O_i_arr[1])
+# Create dictionary of operators to be used
+operator_dict = Dict{String, Any}()
+for (I, I_dict) in operator_labels
+    operator_dict[I] = Dict{String, Any}()
+    for (P_label, P_dict) in I_dict
+        operator_dict[I][P_label] = Dict{String, Any}()
+        P_arr = operator_dict_all[I][P_label]["P_tot_arr"]
+        for (irrep, op_labels) in P_dict
+            operator_dict[I][P_label][irrep] = Vector{Vector{CIP.Operator}}()
+            irrep_dim = operator_dict_all[I][P_label][irrep]["irrep_dim"]
 
-# Operator labels
-operator_labels = ["DD*s nonlocal A1+(0)", "DD*s nonlocal A1+(1)", "DD*s nonlocal E+(1)",
-                   "DD*s nonlocal A1+(2)", "DD*s nonlocal J1+(2)", "DD*s nonlocal J3+(2)",
-                   "D*D*s nonlocal A1+(0),1", "D*D*s nonlocal A1+(1),1",
-                   "D*D*s nonlocal E+(1),1",
-                   "DD*s local A1+", "dad local A1+", "D*D*s local A1+"]
+            # Create operators for each irrep index and total momentum
+            for μ in 1:irrep_dim, P in P_arr
+                # Set arguments to be given to operator functions
+                args = []
+                if P_label != "P000"
+                    push!(args, P)
+                end
+                if irrep_dim > 1
+                    push!(args, μ)
+                end
 
-
-# Skipped correlator matrix entries
-skip_operators = CIP.parms_toml["Corr Matrix Entries"]["skip_operators"]
-skipped_entries = [[i, j] for (i, j) in Iterators.product(skip_operators, skip_operators)]
-
-# Correlator matrix entries from external file (if they are already computed)
-ext_corr_types = CIP.parms_toml["Corr Matrix Entries"]["external corr"]["types"]
-ext_corr_file = CIP.parms_toml["Corr Matrix Entries"]["external corr"]["file"]
-ext_corr_group = CIP.parms_toml["Corr Matrix Entries"]["external corr"]["group"]
-ext_corr_operators = CIP.parms_toml["Corr Matrix Entries"]["external corr"]["operators"]
-ext_corr_entries = [[i, j]
-                    for (i, j) in Iterators.product(ext_corr_operators, ext_corr_operators)]
+                # Call operator functions and store in dictionary
+                operator_arr = Vector{CIP.Operator}()
+                for op_label in op_labels
+                    push!(operator_arr,
+                          operator_dict_all[I][P_label][irrep][op_label](args...))
+                end
+                push!(operator_dict[I][P_label][irrep], operator_arr)
+            end
+        end
+    end
+end
 
 
+# %%##############################################
+# Check transformation properties of the operators
+##################################################
 
-# %%###############################
-# Paths and Functions to Read Files
-###################################
+@time "Check transformation properties of the operators" for I in keys(operator_dict), P in keys(operator_dict[I]), 
+    irrep in keys(operator_dict[I][P])
+    # Matrix with operators where each column should cointain equivalent operators
+    O_matrix = stack(operator_dict[I][P][irrep], dims=1)
+
+    # Check total momentum squared
+    P_rep = CIP.transformation_properties[P]["P_rep"]
+    P_matrix = vec(CIP.get_tot_momentum.(O_matrix))
+    @assert(all(P_rep'*P_rep .== transpose.(vec(P_matrix)) .* vec(P_matrix)),
+        "Operators in $I, $P, $irrep have different total momentum squared.")
+
+    # Find operator with representative total momentum
+    P_arr = P_matrix[:, 1]
+    i_P_rep = findfirst(==(P_rep), P_arr)
+
+    # Check transformation properties under rotations
+    generators = CIP.transformation_properties[P]["generators"]
+    irrep_matrices = CIP.transformation_properties[P][irrep]
+    # Reshape operator matrix to shape (tot momentum, irrep index, inequivalent operators)
+    N_tot_momenta = CIP.transformation_properties[P]["N tot momenta"]
+    irrep_dim = size(irrep_matrices[1], 1)
+    N_ops = size(O_matrix, 2)
+    O_tensor = reshape(O_matrix, (N_tot_momenta, irrep_dim, N_ops))
+    # For representative operator check if it is in irrep
+    for (R, D) in zip(generators, irrep_matrices)
+        O_rotated = CIP.Oh_transform_operators.([R], O_tensor[i_P_rep, :, :])
+        @assert(all(O_rotated .≈ D * O_tensor[i_P_rep, :, :]),
+                "Operator is not in irrep for $I, $P, $irrep.")
+    end
+    # For remaining operators check equivalence
+    for i_P = 1:N_tot_momenta
+        if i_P == i_P_rep
+            continue
+        end
+        @assert(all(CIP.isequivalent.(O_tensor[i_P_rep, :, :], O_tensor[i_P, :, :])),
+                "Equivalence check failed for $I, $P, $irrep")
+    end
+
+    # Check that no two operators are equal
+    for (i, Oᵢ) in enumerate(O_matrix)
+        for (j, Oⱼ) in enumerate(O_matrix)
+            if i != j
+                @assert(!(Oᵢ ≈ Oⱼ), "Two operators are equal for $I, $P, $irrep")
+            end
+        end
+    end
+
+    # Check isospin
+    s = I == "I0" ? -1 : 1
+    @assert(all(CIP.isospin_rotate_operator.(O_matrix) .≈ s * O_matrix),
+        "Isospin rotation check failed for $I, $P, $irrep")
+end
+
+
+# %%###########################################
+# File names, Paths and Functions to Read Files
+###############################################
 
 # Path to result directory
 result_dir = Path(CIP.parms_toml["Directories and Files"]["result_dir"])
+
+# Output file names
+correlator_file = result_dir/CIP.parms_toml["File base names"]["corr_result"]
+correlator_file_tmp(n_cnfg) = begin
+    name, ext = splitext(CIP.parms_toml["File base names"]["corr_result"])
+    result_dir/"$(name)_n$(n_cnfg)_tmp$(ext)"
+end
 
 
 function read_raw_corr(label, n_cnfg, t₀)
@@ -111,11 +173,6 @@ function get_raw_corr_dict(n_cnfg, t₀)
 
     types_arr = ["DD_local", "DD_nonlocal", "DD_mixed", "dad_local",
                  "dad-DD_local", "dad-DD_local-nonlocal"]
-    
-    # Remove types that are skipped
-    if length(skipped_entries) != 0
-        types_arr = filter(type -> type ∉ ext_corr_types, types_arr)
-    end
 
     for type in types_arr
         raw_corr_dict[type] = read_raw_corr(type, n_cnfg, t₀)
@@ -129,35 +186,44 @@ end
 # Allocate Correlator Arrays
 ############################
 
-corr_matrix_size = (CIP.parms.nₜ, N_op, N_op, CIP.parms.N_directions, CIP.parms.N_src,
-                    CIP.parms.N_cnfg)
-corr_matrix = Array{ComplexF64}(undef, corr_matrix_size)
-
-# Dimension labels (reversed order in julia)
-dimension_labels = ["config", "tsrc", "fwd/bwd", "op_src", "op_snk", "t"]
+corr_matrix_dict = Dict()
+for I in keys(operator_dict)
+    corr_matrix_dict[I] = Dict()
+    for P in keys(operator_dict[I])
+        corr_matrix_dict[I][P] = Dict()
+        for irrep in keys(operator_dict[I][P])
+            N_op = length(operator_dict[I][P][irrep][1])
+            corr_matrix_size = (CIP.parms.nₜ, N_op, N_op, CIP.parms.N_directions,
+                                CIP.parms.N_src)
+            corr_matrix_dict[I][P][irrep] = Array{ComplexF64}(undef, corr_matrix_size)
+        end
+    end
+end
 
 
 # %%#########
 # Calculation
 #############
 
-function compute_corr_matrix_entries(raw_corr_dict)
-    # Allocate corr matrix with zeros (forward and backward shape)
+function compute_corr_matrix_entries(raw_corr_dict, I, P, irrep)
+    N_eqivalent = length(operator_dict[I][P][irrep])
+    N_op = length(operator_dict[I][P][irrep][1])
+    O_μ_arr = operator_dict[I][P][irrep]
+
+    # Allocate corr matrix with zeros (forward/backward shape)
     Cₜ_fb = zeros(ComplexF64, CIP.parms.nₜ, N_op, N_op, CIP.parms.N_directions)
 
-    # Loop over spin index
-    for i in 1:3
+    # Loop over irrep index and total momentum directions
+    for idx in 1:N_eqivalent
         # Loop over all operators
-        for (i_O_sink, O_sink) in enumerate(O_i_arr[i])
-            for (i_O_src, O_src) in enumerate(O_i_arr[i])
-                # Check if this entrie should be computed
-                if !([i_O_sink, i_O_src] in skipped_entries)
-                    Cₜ_fb[:, i_O_sink, i_O_src, :] .+= 
-                        1/3*CIP.project_tetraquark_corr(O_sink, O_src, raw_corr_dict)
-                end
+        for (μ_O_sink, O_sink) in enumerate(O_μ_arr[idx])
+            for (μ_O_src, O_src) in enumerate(O_μ_arr[idx])
+                Cₜ_fb[:, μ_O_sink, μ_O_src, :] .+=
+                    CIP.project_tetraquark_corr(O_sink, O_src, raw_corr_dict)
             end
         end
     end
+    Cₜ_fb ./= N_eqivalent
     
     return Cₜ_fb
 end
@@ -176,51 +242,74 @@ function main()
             for (i_src, t₀) in enumerate(CIP.parms.tsrc_arr[i_cnfg, :])
                 # println("  Source: $i_src of $(CIP.parms.N_src)")
 
-                # Compute correlator matrix
+                # Read raw correlator data
                 raw_corr_dict = get_raw_corr_dict(n_cnfg, t₀)
-                Cₜ_fb = compute_corr_matrix_entries(raw_corr_dict)
 
-                # Store correlator matrix entries (transpose backward correlator)
-                corr_matrix[:, :, :, 1, i_src, i_cnfg] = Cₜ_fb[:, :, :, 1]
-                corr_matrix[:, :, :, 2, i_src, i_cnfg] = 
-                    permutedims(Cₜ_fb[:, :, :, 2], [1, 3, 2])
+                # Compute correlator matrix
+                for I in keys(corr_matrix_dict),
+                    P in keys(corr_matrix_dict[I]), 
+                    irrep in keys(corr_matrix_dict[I][P])
+
+                    Cₜ_fb = compute_corr_matrix_entries(raw_corr_dict, I, P, irrep)
+
+                    # Store correlator matrix entries (transpose backward correlator)
+                    corr_matrix_dict[I][P][irrep][:, :, :, 1, i_src] =
+                        Cₜ_fb[:, :, :, 1]
+                    corr_matrix_dict[I][P][irrep][:, :, :, 2, i_src] = 
+                        permutedims(Cₜ_fb[:, :, :, 2], [1, 3, 2])
+                end
+            end
+
+            # Write corr_matrix_dict to tmp files
+            HDF5.h5open(string(correlator_file_tmp(n_cnfg)), "w") do f
+                for I in keys(corr_matrix_dict),
+                    P in keys(corr_matrix_dict[I]), 
+                    irrep in keys(corr_matrix_dict[I][P])
+
+                    f["c2_DD/$I/$P/$irrep"] = corr_matrix_dict[I][P][irrep]
+                end
             end
         end
         println("\n")
     end
-
-    # Broadcast correlators to all ranks
-    @time "Broadcast correlators" begin
-        CIP.broadcast_correlators!(corr_matrix, cnfg_dim=6)
-    end
+    MPI.Barrier(comm)
 
     # Finalize and write correlator
     if myrank == 0
-        # Take entries from external file
-        if length(skipped_entries) != 0
-            if length(skipped_entries) != length(ext_corr_entries)
-                throw(ArgumentError("There must be as many entries that are skipped as " *
-                                    "entries that are taken from the external file."))
+        @time "Combine correlator data" HDF5.h5open(string(correlator_file), "w") do f
+            # Dimension labels (reversed order in julia)
+            dimension_labels = ["config", "tsrc", "fwd/bwd", "op_src", "op_snk", "t"]
+
+            for I in keys(corr_matrix_dict),
+                P in keys(corr_matrix_dict[I]), 
+                irrep in keys(corr_matrix_dict[I][P])
+
+                group = "c2_DD/$I/$P/$irrep"
+
+                # Read tmp files and combine data
+                N_op = length(operator_dict[I][P][irrep][1])
+                corr_matrix_size = (CIP.parms.nₜ, N_op, N_op, CIP.parms.N_directions,
+                                    CIP.parms.N_src, CIP.parms.N_cnfg)
+                corr_temp = Array{ComplexF64}(undef, corr_matrix_size)
+                for (i_cnfg, n_cnfg) in enumerate(CIP.parms.cnfg_indices)
+                    corr_temp[:, :, :, :, :, i_cnfg] =
+                        HDF5.h5read(string(correlator_file_tmp(n_cnfg)), group)
+                end
+
+                f[group] = corr_temp
+                HDF5.attrs(f[group])["operators"] = operator_labels[I][P][irrep]
+                HDF5.attrs(f[group])["DIMENSION_LABELS"] = dimension_labels
             end
 
-            # Read external correlator
-            ext_corr = HDF5.h5read(ext_corr_file, ext_corr_group)
-
-            for ((i_O_sink, i_O_src), (i_O_sink_ext, i_O_src_ext)) in 
-                zip(skipped_entries, ext_corr_entries)
-
-                # Store external correlator entries in correlator
-                # (assume all sorces are used)
-                corr_matrix[:, i_O_sink, i_O_src, :, :, :] = 
-                    ext_corr[:, i_O_sink_ext, i_O_src_ext, :, :, CIP.parms.cnfg_indices]
-            end
+            # Write parameter file and program info
+            f["parms.toml"] = CIP.parms.parms_toml_string
+            f["Program Information"] = CIP.parms_toml["Program Information"]
         end
 
-        # Write correlator
-        correlator_file = result_dir/CIP.parms_toml["File base names"]["corr_result"]
-        group = "c2_dad-DD/I0/P000/T1+"
-        CIP.write_corr_matrix(correlator_file, corr_matrix, group, operator_labels,
-                              dimension_labels, "w")
+        # Remove tmp files
+        for n_cnfg in CIP.parms.cnfg_indices
+            rm(correlator_file_tmp(n_cnfg))
+        end
     end
 
 end

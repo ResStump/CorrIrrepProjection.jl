@@ -199,13 +199,11 @@ function get_dad_local_corr(O_sink, O_src, raw_corr_dict)
     end
 
     # Indices for gamma matrices
-    @assert O_sink["Γ₁"] == O_src["Γ₁"] "Diquark-antidiquark correlators with different " *
-                                        "spin structure at sink and source not implemented."
-    @assert O_sink["Γ₂"] == O_src["Γ₂"] "Diquark-antidiquark correlators with different " *
-                                        "spin structure at sink and source not implemented."
     Γ_idx = [
         Γ_str_to_idx(O_sink["Γ₁"], Γ_labels["Gamma_dad_1"]),
-        Γ_str_to_idx(O_sink["Γ₂"], Γ_labels["Gamma_dad_2"])
+        Γ_str_to_idx(O_sink["Γ₂"], Γ_labels["Gamma_dad_2"]),
+        Γ_str_to_idx(O_src["Γ₁"], Γ_labels["Gamma_dad_1"]),
+        Γ_str_to_idx(O_src["Γ₂"], Γ_labels["Gamma_dad_2"])
     ]
     
     # Extract relevant part from raw correlators (and multiply with sign)
