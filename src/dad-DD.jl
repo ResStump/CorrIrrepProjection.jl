@@ -138,6 +138,7 @@ end
     @assert(all(CIP.isospin_rotate_operator.(O_matrix) .≈ s * O_matrix),
         "Isospin rotation check failed for $I, $P, $irrep")
 end
+println()
 
 
 # %%###########################################
@@ -236,17 +237,18 @@ function main()
             continue
         end
 
-        #println("Configuration $n_cnfg")
+        println("Configuration $n_cnfg")
         @time "Finished configuration $n_cnfg" begin
             # Loop over all sources
             for (i_src, t₀) in enumerate(CIP.parms.tsrc_arr[i_cnfg, :])
-                # println("  Source: $i_src of $(CIP.parms.N_src)")
+                println("  Source: $i_src of $(CIP.parms.N_src)")
 
                 # Read raw correlator data
-                raw_corr_dict = get_raw_corr_dict(n_cnfg, t₀)
+                @time "    Read raw correlator data" raw_corr_dict = 
+                    get_raw_corr_dict(n_cnfg, t₀)
 
                 # Compute correlator matrix
-                for I in keys(corr_matrix_dict),
+                @time "    Compute correlator matrix" for I in keys(corr_matrix_dict),
                     P in keys(corr_matrix_dict[I]), 
                     irrep in keys(corr_matrix_dict[I][P])
 
@@ -261,15 +263,20 @@ function main()
             end
 
             # Write corr_matrix_dict to tmp files
-            HDF5.h5open(string(correlator_file_tmp(n_cnfg)), "w") do f
-                for I in keys(corr_matrix_dict),
-                    P in keys(corr_matrix_dict[I]), 
-                    irrep in keys(corr_matrix_dict[I][P])
+            @time "  Write tmp correlator file" begin
+                HDF5.h5open(string(correlator_file_tmp(n_cnfg)), "w") do f
+                    for I in keys(corr_matrix_dict),
+                        P in keys(corr_matrix_dict[I]), 
+                        irrep in keys(corr_matrix_dict[I][P])
 
-                    f["c2_DD/$I/$P/$irrep"] = corr_matrix_dict[I][P][irrep]
+                        f["c2_DD/$I/$P/$irrep"] = corr_matrix_dict[I][P][irrep]
+                    end
                 end
             end
         end
+        # Garbage collect after each configuration
+        GC.gc()
+        
         println("\n")
     end
     MPI.Barrier(comm)
