@@ -155,28 +155,37 @@ correlator_file_tmp(n_cnfg) = begin
     result_dir/"$(name)_n$(n_cnfg)_tmp$(ext)"
 end
 
-
-function read_raw_corr(label, n_cnfg, t₀)
-    base_name = CIP.parms_toml["File base names"][label]
-    dir = Path(CIP.parms_toml["Directories and Files"]["raw_corr_$(label)_dir"])
-    file_path = dir/"$(base_name)_n$(n_cnfg)_tsrc$(t₀).hdf5"
-
-    file = HDF5.h5open(string(file_path), "r")
-    correlators = read(file["Correlators"])
-    spin_structure = read(file["Spin Structure"])
-    close(file)
-
-    return Dict("Correlators" => correlators, "Spin Structure" => spin_structure)
-end
-
-function get_raw_corr_dict(n_cnfg, t₀)
+function get_raw_corr_dict(n_cnfg, I, P, t₀)
     raw_corr_dict = Dict()
 
     types_arr = ["DD_local", "DD_nonlocal", "DD_mixed", "dad_local",
                  "dad-DD_local", "dad-DD_local-nonlocal"]
 
+    Ptot_arr = operator_dict_all[I][P]["P_tot_arr"]
+
     for type in types_arr
-        raw_corr_dict[type] = read_raw_corr(type, n_cnfg, t₀)
+        # Generate file path
+        base_name = CIP.parms_toml["File base names"][type]
+        dir = Path(CIP.parms_toml["Directories and Files"]["raw_corr_$(type)_dir"])
+        file_path = dir/"$(base_name)_n$(n_cnfg)_tsrc$(t₀).hdf5"
+
+        # Read correlators with matching total momentum
+        file = HDF5.h5open(string(file_path), "r")
+        correlators = Dict{String, Any}()
+        for P_key in keys(file["Correlators"])
+            # Extract total momentum vector from key
+            P_key_short = replace(P_key, "Ptot" => "", "p" => "")
+            P_vec = parse.(Int, split(P_key_short, ","))
+
+            if P_vec in Ptot_arr
+                correlators[P_key] = read(file["Correlators/$P_key"])
+            end
+        end
+        spin_structure = read(file["Spin Structure"])
+        close(file)
+
+        raw_corr_dict[type] = 
+            Dict("Correlators" => correlators, "Spin Structure" => spin_structure)
     end
 
     return raw_corr_dict
@@ -241,24 +250,23 @@ function main()
         @time "Finished configuration $n_cnfg" begin
             # Loop over all sources
             for (i_src, t₀) in enumerate(CIP.parms.tsrc_arr[i_cnfg, :])
-                println("  Source: $i_src of $(CIP.parms.N_src)")
+                @time "  Source: $i_src of $(CIP.parms.N_src)" begin
+                    for I in keys(corr_matrix_dict), P in keys(corr_matrix_dict[I])
+                        # Read raw correlator data with matching total momentum
+                        raw_corr_P_dict = get_raw_corr_dict(n_cnfg, I, P, t₀)
 
-                # Read raw correlator data
-                @time "    Read raw correlator data" raw_corr_dict = 
-                    get_raw_corr_dict(n_cnfg, t₀)
+                        # Compute correlator matrix
+                        for irrep in keys(corr_matrix_dict[I][P])
+                            Cₜ_fb =
+                                compute_corr_matrix_entries(raw_corr_P_dict, I, P, irrep)
 
-                # Compute correlator matrix
-                @time "    Compute correlator matrix" for I in keys(corr_matrix_dict),
-                    P in keys(corr_matrix_dict[I]), 
-                    irrep in keys(corr_matrix_dict[I][P])
-
-                    Cₜ_fb = compute_corr_matrix_entries(raw_corr_dict, I, P, irrep)
-
-                    # Store correlator matrix entries (transpose backward correlator)
-                    corr_matrix_dict[I][P][irrep][:, :, :, 1, i_src] =
-                        Cₜ_fb[:, :, :, 1]
-                    corr_matrix_dict[I][P][irrep][:, :, :, 2, i_src] = 
-                        permutedims(Cₜ_fb[:, :, :, 2], [1, 3, 2])
+                            # Store correlator matrix entries (transpose backward correlator)
+                            corr_matrix_dict[I][P][irrep][:, :, :, 1, i_src] =
+                                Cₜ_fb[:, :, :, 1]
+                            corr_matrix_dict[I][P][irrep][:, :, :, 2, i_src] = 
+                                permutedims(Cₜ_fb[:, :, :, 2], [1, 3, 2])
+                        end
+                    end
                 end
             end
 
