@@ -170,19 +170,20 @@ function get_raw_corr_dict(n_cnfg, I, P, t₀)
         file_path = dir/"$(base_name)_n$(n_cnfg)_tsrc$(t₀).hdf5"
 
         # Read correlators with matching total momentum
-        file = HDF5.h5open(string(file_path), "r")
         correlators = Dict{String, Any}()
-        for P_key in keys(file["Correlators"])
-            # Extract total momentum vector from key
-            P_key_short = replace(P_key, "Ptot" => "", "p" => "")
-            P_vec = parse.(Int, split(P_key_short, ","))
+        spin_structure = nothing
+        HDF5.h5open(string(file_path), "r") do file
+            for P_key in keys(file["Correlators"])
+                # Extract total momentum vector from key
+                P_key_short = replace(P_key, "Ptot" => "", "p" => "")
+                P_vec = parse.(Int, split(P_key_short, ","))
 
-            if P_vec in Ptot_arr
-                correlators[P_key] = read(file["Correlators/$P_key"])
+                if P_vec in Ptot_arr
+                    correlators[P_key] = read(file["Correlators/$P_key"])
+                end
             end
+            spin_structure = read(file["Spin Structure"])
         end
-        spin_structure = read(file["Spin Structure"])
-        close(file)
 
         raw_corr_dict[type] = 
             Dict("Correlators" => correlators, "Spin Structure" => spin_structure)
@@ -284,6 +285,7 @@ function main()
         end
         # Garbage collect after each configuration
         GC.gc()
+        HDF5.API.h5_garbage_collect()
         
         println("\n")
     end
