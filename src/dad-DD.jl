@@ -155,7 +155,7 @@ correlator_file_tmp(n_cnfg) = begin
     result_dir/"$(name)_n$(n_cnfg)_tmp$(ext)"
 end
 
-function get_raw_corr_dict(n_cnfg, I, P, t₀)
+function get_raw_corr_dict(n_cnfg, t₀, I, P)
     raw_corr_dict = Dict()
 
     types_arr = ["DD_local", "DD_nonlocal", "DD_mixed", "dad_local",
@@ -254,7 +254,7 @@ function main()
                 @time "  Source: $i_src of $(CIP.parms.N_src)" begin
                     for I in keys(corr_matrix_dict), P in keys(corr_matrix_dict[I])
                         # Read raw correlator data with matching total momentum
-                        raw_corr_P_dict = get_raw_corr_dict(n_cnfg, I, P, t₀)
+                        raw_corr_P_dict = get_raw_corr_dict(n_cnfg, t₀, I, P)
 
                         # Compute correlator matrix
                         for irrep in keys(corr_matrix_dict[I][P])
@@ -328,7 +328,6 @@ function main()
             rm(correlator_file_tmp(n_cnfg))
         end
     end
-
 end
 
 main()
