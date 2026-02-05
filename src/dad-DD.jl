@@ -232,6 +232,9 @@ function compute_corr_matrix_entries(raw_corr_dict, I, P, irrep)
                 Cₜ_fb[:, μ_O_sink, μ_O_src, :] .+=
                     CIP.project_tetraquark_corr(O_sink, O_src, raw_corr_dict)
             end
+
+            # Garbage collect young objects
+            GC.gc(false)
         end
     end
     Cₜ_fb ./= N_eqivalent
@@ -268,6 +271,9 @@ function main()
                                 permutedims(Cₜ_fb[:, :, :, 2], [1, 3, 2])
                         end
                     end
+
+                    # Garbage collect fully after each source time
+                    GC.gc()
                 end
             end
 
@@ -283,9 +289,6 @@ function main()
                 end
             end
         end
-        # Garbage collect after each configuration
-        GC.gc()
-        HDF5.API.h5_garbage_collect()
         
         println("\n")
     end
